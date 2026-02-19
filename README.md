@@ -1,91 +1,91 @@
 # Munchkin Companion PWA
 
-A real-time Progressive Web App to track levels, gear, and combat strength during **Munchkin** board game sessions — no installation required.
+Aplicación web progresiva en tiempo real para registrar niveles, equipamiento y fuerza de combate durante partidas de **Munchkin** — sin necesidad de instalación.
 
 ![Munchkin Companion](public/munckin.jpg)
 
-## Features
+## Funcionalidades
 
-- **Real-time sync** — All players see updates instantly (<100ms)
-- **Anonymous sessions** — No account needed; join with a 4-char game code
-- **Mobile-first** — Optimized for phones with large, touch-friendly controls
-- **Combat tracker** — Full combat resolution with monster/player modifiers and a helper system
-- **Turn management** — Enforced turn order with active/passive player roles
-- **Gear tracking** — Head, armor, hands, and feet slots with backpack storage
-- **Host controls** — Kick players, reorder turns, and manage game settings
-- **Game history** — Review past sessions and results
+- **Sincronización en tiempo real** — Todos los jugadores ven los cambios al instante (<100ms)
+- **Sesiones anónimas** — Sin registro; únete con un código de partida de 4 caracteres
+- **Mobile-first** — Optimizado para móviles con controles táctiles amplios
+- **Seguimiento de combate** — Resolución completa con modificadores de monstruo/jugador y sistema de ayudante
+- **Gestión de turnos** — Orden de turno forzado con roles activo/pasivo
+- **Equipamiento** — Ranuras de cabeza, armadura, manos y pies con mochila de almacenamiento
+- **Panel del anfitrión** — Expulsar jugadores, reordenar turnos y gestionar la partida
+- **Historial de partidas** — Consulta sesiones y resultados anteriores
 
-## Tech Stack
+## Tecnologías
 
-| Layer | Technology |
-|-------|-----------|
+| Capa | Tecnología |
+|------|-----------|
 | Frontend | React 19 + TypeScript |
-| Build tool | Vite |
-| Styling | Tailwind CSS v4 |
-| State | React Context API |
+| Build | Vite |
+| Estilos | Tailwind CSS v4 |
+| Estado | React Context API |
 | Backend | Firebase Realtime Database |
-| Auth | Firebase Anonymous Auth |
-| Routing | React Router DOM v7 |
-| Icons | Lucide React |
+| Auth | Firebase Auth Anónimo |
+| Enrutamiento | React Router DOM v7 |
+| Iconos | Lucide React |
 
-## Prerequisites
+## Requisitos previos
 
 - [Node.js](https://nodejs.org/) 18+
-- A [Firebase](https://firebase.google.com/) project with:
-  - **Realtime Database** enabled
-  - **Anonymous Authentication** enabled
+- Un proyecto de [Firebase](https://firebase.google.com/) con:
+  - **Realtime Database** habilitado
+  - **Autenticación anónima** habilitada
 
-## Getting Started
+## Puesta en marcha
 
-### 1. Clone the repository
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/CodeMaho/TableManager.git
 cd TableManager
 ```
 
-### 2. Install dependencies
+### 2. Instalar dependencias
 
 ```bash
 npm install
 ```
 
-### 3. Configure Firebase
+### 3. Configurar Firebase
 
-Open `src/services/firebase.ts` and replace the `firebaseConfig` object with your own Firebase project credentials:
+Abre `src/services/firebase.ts` y reemplaza el objeto `firebaseConfig` con las credenciales de tu proyecto Firebase:
 
 ```typescript
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.REGION.firebasedatabase.app",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.firebasestorage.app",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  databaseURL: "https://TU_PROYECTO-default-rtdb.REGION.firebasedatabase.app",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.firebasestorage.app",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID",
 };
 ```
 
-### 4. Run the development server
+### 4. Iniciar el servidor de desarrollo
 
 ```bash
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+La app estará disponible en `http://localhost:5173`.
 
-## Available Scripts
+## Scripts disponibles
 
-| Command | Description |
+| Comando | Descripción |
 |---------|-------------|
-| `npm run dev` | Start development server with HMR |
-| `npm run build` | Type-check and build for production |
-| `npm run preview` | Preview the production build locally |
-| `npm run lint` | Run ESLint |
+| `npm run dev` | Inicia el servidor de desarrollo con HMR |
+| `npm run build` | Comprueba tipos y genera la build de producción |
+| `npm run preview` | Previsualiza la build de producción en local |
+| `npm run lint` | Ejecuta ESLint |
 
-## Deployment
+## Despliegue
 
-The app can be deployed to any static hosting platform (Firebase Hosting, Vercel, Netlify, etc.).
+La app puede desplegarse en cualquier plataforma de hosting estático (Firebase Hosting, Vercel, Netlify, etc.).
 
 ### Firebase Hosting
 
@@ -94,44 +94,44 @@ npm run build
 firebase deploy
 ```
 
-## Project Structure
+## Estructura del proyecto
 
 ```
 src/
 ├── components/
 │   ├── layout/
-│   │   ├── GameLayout.tsx      # Main game wrapper
-│   │   └── Navbar.tsx          # Turn/status indicator
+│   │   ├── GameLayout.tsx      # Contenedor principal del juego
+│   │   └── Navbar.tsx          # Indicador de turno y estado
 │   ├── game/
-│   │   ├── StatTracker.tsx     # [-] Value [+] stepper component
-│   │   ├── GearSlot.tsx        # Equipment slot with icon
-│   │   ├── PlayerCard.tsx      # Opponent summary card
-│   │   ├── PlayerAvatar.tsx    # Avatar display component
-│   │   └── CombatOverlay.tsx   # Combat mode modal
+│   │   ├── StatTracker.tsx     # Componente stepper [-] Valor [+]
+│   │   ├── GearSlot.tsx        # Ranura de equipamiento con icono
+│   │   ├── PlayerCard.tsx      # Tarjeta resumen de un rival
+│   │   ├── PlayerAvatar.tsx    # Componente de avatar
+│   │   └── CombatOverlay.tsx   # Modal de modo combate
 │   └── lobby/
-│       └── LobbyList.tsx       # Waiting room player list
+│       └── LobbyList.tsx       # Lista de jugadores en sala de espera
 ├── context/
-│   └── GameContext.tsx         # Global game state provider
+│   └── GameContext.tsx         # Proveedor global de estado
 ├── hooks/
-│   ├── useAuth.ts              # Firebase anonymous auth
-│   ├── useGame.ts              # Firebase Realtime DB subscription
-│   └── useCombat.ts            # Combat strength calculations
+│   ├── useAuth.ts              # Autenticación anónima Firebase
+│   ├── useGame.ts              # Suscripción a Firebase Realtime DB
+│   └── useCombat.ts            # Cálculo de fuerza de combate
 ├── pages/
-│   ├── HomePage.tsx            # Create/Join game screen
-│   ├── LobbyPage.tsx           # Pre-game lobby
-│   └── GamePage.tsx            # Main game view
+│   ├── HomePage.tsx            # Pantalla de crear/unirse a partida
+│   ├── LobbyPage.tsx           # Sala de espera previa al juego
+│   └── GamePage.tsx            # Vista principal de la partida
 ├── services/
-│   └── firebase.ts             # Firebase initialization
+│   └── firebase.ts             # Inicialización de Firebase
 ├── types/
-│   └── game.ts                 # TypeScript interfaces
+│   └── game.ts                 # Interfaces TypeScript
 └── utils/
-    ├── avatarUrl.ts            # Avatar helper utilities
-    └── munchkinMath.ts         # Combat strength formulas
+    ├── avatarUrl.ts            # Utilidades de avatar
+    └── munchkinMath.ts         # Fórmulas de fuerza de combate
 ```
 
-## Data Model
+## Modelo de datos
 
-Games are stored in Firebase Realtime Database under `/games/<GAME_ID>`:
+Las partidas se almacenan en Firebase Realtime Database bajo `/games/<GAME_ID>`:
 
 ```
 games/
@@ -143,14 +143,14 @@ games/
         └── <UID>/      # name, isReady, attributes, gear
 ```
 
-### Player Profile
+### Perfil de jugador
 
 ```typescript
 interface PlayerProfile {
   name: string;
   isReady: boolean;
   attributes: {
-    level: number;   // 1 – maxLevel
+    level: number;   // 1 – nivelMáximo
     debuff: number;
     sex: 'M' | 'F';
     race: string;
@@ -166,20 +166,20 @@ interface PlayerProfile {
 }
 ```
 
-**Combat strength** (computed on the frontend):
+**Fuerza de combate** (calculada en el frontend):
 ```
-combatStrength = level + head + armor + hands + feet
+fuerzaCombate = nivel + cabeza + armadura + manos + pies - debuff
 ```
 
-## Game Rules Summary
+## Resumen de reglas
 
-- Each player starts at **Level 1** and aims to reach the configured max level (default: 10).
-- On your turn you can fight monsters, upgrade gear, and sell items for levels.
-- **Combat**: `MunchkinSide = (Player + Helper combat strength) + PlayerModifiers` vs `MonsterLevel + MonsterModifiers`.
-- Selling items: every **1000 Gold = +1 Level** (cannot win by selling alone).
-- Another player can join combat as a **Helper** via a request/accept flow.
-- The first player to reach max level wins the game.
+- Cada jugador empieza en **Nivel 1** y busca alcanzar el nivel máximo configurado (por defecto: 10).
+- En tu turno puedes luchar contra monstruos, mejorar equipamiento y vender objetos por niveles.
+- **Combate:** `LadoMunchkin = (Jugador + Ayudante fuerza de combate) + ModificadoresJugador` vs `NivelMonstruo + ModificadoresMonstruo`.
+- Vender objetos: cada **1000 Oro = +1 Nivel** (no se puede ganar solo vendiendo).
+- Otro jugador puede unirse al combate como **Ayudante** mediante una solicitud de aceptación.
+- El primer jugador en alcanzar el nivel máximo gana la partida.
 
-## License
+## Licencia
 
 MIT
