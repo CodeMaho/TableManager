@@ -62,7 +62,7 @@ export function LobbyList({ players, hostId, turnOrder, isHost, onMovePlayer }: 
 
             {/* Player info */}
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} size="md" />
+              <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="md" />
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900 truncate">
                   {player.name}

@@ -112,7 +112,7 @@ export function Navbar() {
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} size="md" />
+                      <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="md" />
                       <div>
                         <p className="font-bold text-gray-900">
                           {player.name}

@@ -133,7 +133,7 @@ export function CombatOverlay() {
                   onClick={() => sendHelperRequest(gameId, uid, id)}
                   className="w-full min-h-12 px-4 rounded-lg border border-gray-200 text-left flex items-center gap-2 active:bg-gray-50"
                 >
-                  <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} size="sm" />
+                  <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="sm" />
                   <span className="font-medium">{player.name}</span>
                   <span className="text-sm text-gray-500 ml-auto">Fuerza: {getCombatStrength(player)}</span>
                 </button>

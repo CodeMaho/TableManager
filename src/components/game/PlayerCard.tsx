@@ -26,7 +26,7 @@ export function PlayerCard({ player, isActive, isHost, onKick, onSelect }: Playe
       )}
     >
       <div className="flex items-center gap-3">
-        <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} size="md" />
+        <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="md" />
         <div>
           <p className="font-semibold text-gray-900">{player.name}</p>
           <div className="flex items-center gap-2 text-sm text-gray-500">

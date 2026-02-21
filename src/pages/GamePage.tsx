@@ -138,7 +138,7 @@ export function GamePage() {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <PlayerAvatar race={myProfile.attributes.race} playerClass={myProfile.attributes.class} size="lg" />
+                <PlayerAvatar race={myProfile.attributes.race} playerClass={myProfile.attributes.class} sex={myProfile.attributes.sex} playerName={myProfile.name} size="lg" />
                 <h3 className="font-bold text-gray-900 text-lg">{myProfile.name}</h3>
               </div>
               <div className="flex items-center gap-2 text-amber-600">
