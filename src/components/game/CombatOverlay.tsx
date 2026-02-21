@@ -2,6 +2,7 @@ import { X, Swords, Trophy, Footprints, Skull, HandHelping, Clock, Check, XCircl
 import clsx from 'clsx';
 import { StatTracker } from './StatTracker';
 import { PlayerAvatar } from './PlayerAvatar';
+import { CombatTimer } from './CombatTimer';
 import { useGameContext } from '../../context/GameContext';
 import { getCombatStrength } from '../../utils/munchkinMath';
 
@@ -47,6 +48,9 @@ export function CombatOverlay() {
           </button>
         )}
       </div>
+
+      {/* Combat timer — sincronizado via Firebase */}
+      <CombatTimer />
 
       {/* Notification for helper request */}
       {isRequestedHelper && (
@@ -106,11 +110,13 @@ export function CombatOverlay() {
           <StatTracker
             label="Mod. Monst."
             value={game.combatState.monsterModifiers}
+            min={-99}
             onChange={(v) => updateCombat(gameId, { monsterModifiers: v })}
           />
           <StatTracker
             label="Mod. Jugad."
             value={game.combatState.playerModifiers}
+            min={-99}
             onChange={(v) => updateCombat(gameId, { playerModifiers: v })}
           />
         </div>

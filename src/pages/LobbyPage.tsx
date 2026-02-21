@@ -18,6 +18,7 @@ export function LobbyPage() {
     subscribeToGame,
     toggleReady,
     startGame,
+    reorderTurns,
   } = useGameContext();
 
   useEffect(() => {
@@ -57,14 +58,27 @@ export function LobbyPage() {
 
   return (
     <GameLayout>
-      <div className="flex-1 p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-900">Esperando jugadores...</h2>
           <p className="text-sm text-gray-500 mt-1">Comparte el ID de partida para invitar amigos</p>
           <p className="text-xs text-amber-600 mt-1">Nivel de victoria: {game.meta.maxLevel}</p>
         </div>
 
-        <LobbyList players={players} hostId={game.meta.hostId} />
+        <LobbyList
+          players={players}
+          hostId={game.meta.hostId}
+          turnOrder={turnOrder}
+          isHost={isHost}
+          onMovePlayer={isHost ? (pid, direction) => {
+            const order = [...turnOrder];
+            const idx = order.indexOf(pid);
+            const newIdx = idx + direction;
+            if (newIdx < 0 || newIdx >= order.length) return;
+            [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+            reorderTurns(id, order, game.turnState.activePlayerId);
+          } : undefined}
+        />
       </div>
 
       <div className="sticky bottom-0 p-4 bg-white border-t space-y-2">

@@ -42,6 +42,7 @@ interface GameContextValue {
   kickPlayer: (gameId: string, playerId: string) => Promise<void>;
   getHistory: () => Promise<GameHistoryEntry[]>;
   loadGameFromHistory: (gameId: string) => void;
+  addCombatTime: (gameId: string, delta: number) => Promise<void>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -98,6 +99,7 @@ export function GameProvider({ children }: GameProviderProps) {
     kickPlayer: gameState.kickPlayer,
     getHistory: gameState.getHistory,
     loadGameFromHistory: gameState.loadGameFromHistory,
+    addCombatTime: gameState.addCombatTime,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ref, onValue, off, set, update, get, push } from 'firebase/database';
+import { ref, onValue, off, set, update, get, push, runTransaction } from 'firebase/database';
 import { db } from '../services/firebase';
 import type { GameSession, PlayerProfile, GameHistoryEntry, HelperRequestStatus } from '../types/game';
 import { generateGameId } from '../utils/munchkinMath';
@@ -30,6 +30,7 @@ interface UseGameReturn {
   kickPlayer: (gameId: string, playerId: string) => Promise<void>;
   getHistory: () => Promise<GameHistoryEntry[]>;
   loadGameFromHistory: (gameId: string) => void;
+  addCombatTime: (gameId: string, delta: number) => Promise<void>;
 }
 
 function newPlayerProfile(name: string): PlayerProfile {
@@ -48,6 +49,7 @@ function newPlayerProfile(name: string): PlayerProfile {
       armor: 0,
       hands: 0,
       feet: 0,
+      mount: 0,
       backpack: [],
     },
   };
@@ -250,6 +252,8 @@ export function useGame(): UseGameReturn {
         'combatState/playerModifiers': 0,
         'combatState/helperId': null,
         'combatState/helperRequest': null,
+        'combatState/combatStartedAt': Date.now(),
+        'combatState/combatExtraSeconds': 0,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar combate');
@@ -306,6 +310,8 @@ export function useGame(): UseGameReturn {
         'combatState/playerModifiers': 0,
         'combatState/helperId': null,
         'combatState/helperRequest': null,
+        'combatState/combatStartedAt': null,
+        'combatState/combatExtraSeconds': 0,
       };
 
       if (won) {
@@ -351,10 +357,13 @@ export function useGame(): UseGameReturn {
         'combatState/playerModifiers': 0,
         'combatState/helperId': null,
         'combatState/helperRequest': null,
+        'combatState/combatStartedAt': null,
+        'combatState/combatExtraSeconds': 0,
         [`players/${playerId}/gear/head`]: 0,
         [`players/${playerId}/gear/armor`]: 0,
         [`players/${playerId}/gear/hands`]: 0,
         [`players/${playerId}/gear/feet`]: 0,
+        [`players/${playerId}/gear/mount`]: 0,
         [`players/${playerId}/gear/backpack`]: [],
       };
 
@@ -423,6 +432,16 @@ export function useGame(): UseGameReturn {
     }
   }, []);
 
+  const addCombatTime = useCallback(async (id: string, delta: number) => {
+    try {
+      await runTransaction(ref(db, `games/${id}/combatState/combatExtraSeconds`), (current) => {
+        return (current ?? 0) + delta;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al ajustar tiempo');
+    }
+  }, []);
+
   const getHistory = useCallback(async (): Promise<GameHistoryEntry[]> => {
     try {
       const snapshot = await get(ref(db, 'history'));
@@ -464,5 +483,6 @@ export function useGame(): UseGameReturn {
     kickPlayer,
     getHistory,
     loadGameFromHistory,
+    addCombatTime,
   };
 }

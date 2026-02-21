@@ -23,6 +23,8 @@ export interface GameSession {
     monsterModifiers: number;
     playerModifiers: number;
     helperId: string | null;
+    combatStartedAt?: number;    // Unix ms cuando empezó el combate
+    combatExtraSeconds?: number; // Segundos añadidos/quitados por los jugadores
     helperRequest?: {
       fromId: string;
       toId: string;
@@ -47,6 +49,7 @@ export interface PlayerProfile {
     armor: number;
     hands: number;
     feet: number;
+    mount: number;
     backpack: string[];
   };
 }

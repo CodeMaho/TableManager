@@ -2,8 +2,8 @@ import type { PlayerProfile, GameSession } from '../types/game';
 
 export function getCombatStrength(player: PlayerProfile): number {
   const { level, debuff } = player.attributes;
-  const { head, armor, hands, feet } = player.gear;
-  return level + head + armor + hands + feet - (debuff || 0);
+  const { head, armor, hands, feet, mount } = player.gear;
+  return level + head + armor + hands + feet + (mount || 0) - (debuff || 0);
 }
 
 export function getMunchkinSide(game: GameSession): number {
