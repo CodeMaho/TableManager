@@ -19,5 +19,12 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Convención `_` para argumentos que se conservan por compatibilidad de
+      // firma pero no se usan. En useGame.ts hay varios: identifican al jugador,
+      // y desde que la identidad la pone el servidor a partir de la sesión ya no
+      // se envían (que es justo lo que impide suplantar a otro).
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
   },
 ])

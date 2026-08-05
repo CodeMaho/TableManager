@@ -3,11 +3,15 @@ import { useAuth } from '../hooks/useAuth';
 import { useGame } from '../hooks/useGame';
 import { useCombat } from '../hooks/useCombat';
 import type { GameSession, PlayerProfile, GameHistoryEntry, HelperRequestStatus } from '../types/game';
-import type { User } from 'firebase/auth';
+import type { Jugador } from '../services/api';
 
 interface GameContextValue {
-  user: User | null;
+  user: Jugador | null;
   uid: string | null;
+  /** true solo con cuenta: habilita nivel, experiencia e historial. */
+  identificado: boolean;
+  /** Vuelve a leer el perfil (tras crear partida, terminar una, o entrar). */
+  refrescarPerfil: () => Promise<void>;
   authLoading: boolean;
   authError: string | null;
 
@@ -21,23 +25,23 @@ interface GameContextValue {
   myProfile: PlayerProfile | null;
   combat: ReturnType<typeof useCombat>;
 
-  createGame: (hostId: string, hostName: string, maxLevel: number) => Promise<string>;
-  joinGame: (gameId: string, playerId: string, playerName: string) => Promise<void>;
-  updatePlayer: (gameId: string, playerId: string, updates: Partial<PlayerProfile>) => Promise<void>;
-  updatePlayerGear: (gameId: string, playerId: string, slot: string, value: number) => Promise<void>;
-  updatePlayerLevel: (gameId: string, playerId: string, level: number) => Promise<void>;
-  toggleReady: (gameId: string, playerId: string, isReady: boolean) => Promise<void>;
-  startGame: (gameId: string, firstPlayerId: string) => Promise<void>;
-  nextTurn: (gameId: string, nextPlayerId: string, turnNumber: number, nextTurnIndex: number) => Promise<void>;
+  createGame: (hostName: string, maxLevel: number) => Promise<string>;
+  joinGame: (gameId: string, playerName: string) => Promise<void>;
+  updatePlayer: (gameId: string, updates: Partial<PlayerProfile>) => Promise<void>;
+  updatePlayerGear: (gameId: string, slot: string, value: number) => Promise<void>;
+  updatePlayerLevel: (gameId: string, level: number) => Promise<void>;
+  toggleReady: (gameId: string, isReady: boolean) => Promise<void>;
+  startGame: (gameId: string) => Promise<void>;
+  nextTurn: (gameId: string) => Promise<void>;
   startCombat: (gameId: string) => Promise<void>;
   updateCombat: (gameId: string, updates: Partial<GameSession['combatState']>) => Promise<void>;
-  endCombat: (gameId: string, won: boolean, activePlayerId: string) => Promise<void>;
-  dieInCombat: (gameId: string, playerId: string) => Promise<void>;
-  sendHelperRequest: (gameId: string, fromId: string, toId: string) => Promise<void>;
+  endCombat: (gameId: string, won: boolean) => Promise<void>;
+  dieInCombat: (gameId: string) => Promise<void>;
+  sendHelperRequest: (gameId: string, toId: string) => Promise<void>;
   respondHelperRequest: (gameId: string, status: HelperRequestStatus) => Promise<void>;
   endGame: (gameId: string, winnerId: string) => Promise<void>;
   updateMaxLevel: (gameId: string, maxLevel: number) => Promise<void>;
-  reorderTurns: (gameId: string, newOrder: string[], activePlayerId: string) => Promise<void>;
+  reorderTurns: (gameId: string, newOrder: string[]) => Promise<void>;
   subscribeToGame: (gameId: string) => void;
   kickPlayer: (gameId: string, playerId: string) => Promise<void>;
   getHistory: () => Promise<GameHistoryEntry[]>;
@@ -65,6 +69,8 @@ export function GameProvider({ children }: GameProviderProps) {
   const value: GameContextValue = {
     user: authState.user,
     uid: authState.uid,
+    identificado: authState.identificado,
+    refrescarPerfil: authState.refrescar,
     authLoading: authState.loading,
     authError: authState.error,
 

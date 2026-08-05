@@ -62,4 +62,9 @@ export interface GameHistoryEntry {
   winnerName?: string;
   maxLevel: number;
   playerNames: string[];
+  // Cómo quedó quien consulta. Solo existen con cuenta: un invitado no tiene
+  // historial, así que nunca recibe estas entradas.
+  miPosicion?: number | null;
+  miXp?: number;
+  miNivel?: number | null;
 }

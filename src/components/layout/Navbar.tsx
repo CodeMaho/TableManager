@@ -7,7 +7,7 @@ import { PlayerAvatar } from '../game/PlayerAvatar';
 import { getCombatStrength } from '../../utils/munchkinMath';
 
 export function Navbar() {
-  const { game, gameId, uid, isMyTurn, isHost, updateMaxLevel, reorderTurns } = useGameContext();
+  const { game, gameId, uid, isMyTurn, isHost, updateMaxLevel, reorderTurns, kickPlayer } = useGameContext();
   const [copied, setCopied] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
@@ -24,7 +24,7 @@ export function Navbar() {
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= order.length) return;
     [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
-    reorderTurns(gameId, order, game.turnState.activePlayerId);
+    reorderTurns(gameId, order);
   };
 
   const activePlayer = game.players[game.turnState.activePlayerId];
@@ -112,7 +112,7 @@ export function Navbar() {
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="md" />
+                      <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} size="md" />
                       <div>
                         <p className="font-bold text-gray-900">
                           {player.name}
@@ -124,7 +124,7 @@ export function Navbar() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 text-sm font-bold">
+                    <div className="flex items-center gap-2 text-sm font-bold">
                       <div className="flex items-center gap-1 text-blue-600">
                         <Shield size={14} />
                         <span>Nv.{player.attributes.level}</span>
@@ -133,6 +133,15 @@ export function Navbar() {
                         <Swords size={14} />
                         <span>{strength}</span>
                       </div>
+                      {isHost && !isMe && game.meta.status !== 'ENDED' && (
+                        <button
+                          type="button"
+                          onClick={() => kickPlayer(gameId, pid)}
+                          className="min-h-8 px-2 rounded-lg text-xs text-red-500 font-medium border border-red-200 active:bg-red-50"
+                        >
+                          Expulsar
+                        </button>
+                      )}
                     </div>
                   </div>
                   {/* Gear */}

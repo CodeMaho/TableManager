@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Swords, Plus, LogIn, History, Trophy, ChevronRight } from 'lucide-react';
+import { Swords, Plus, LogIn, History, Trophy, ChevronRight, UserCog } from 'lucide-react';
 import { useGameContext } from '../context/GameContext';
+import { PerfilJugador } from '../components/PerfilJugador';
+import { EditarPerfil } from '../components/EditarPerfil';
 import type { GameHistoryEntry } from '../types/game';
 
 export function HomePage() {
-  const { uid, authLoading, createGame, joinGame, getHistory, loadGameFromHistory } = useGameContext();
+  const { user, identificado, authLoading, refrescarPerfil, createGame, joinGame, getHistory, loadGameFromHistory } = useGameContext();
   const navigate = useNavigate();
 
   const [playerName, setPlayerName] = useState('');
   const [joinId, setJoinId] = useState('');
   const [maxLevel, setMaxLevel] = useState(10);
-  const [mode, setMode] = useState<'menu' | 'create' | 'join' | 'history'>('menu');
+  const [mode, setMode] = useState<'menu' | 'create' | 'join' | 'history' | 'perfil'>('menu');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<GameHistoryEntry[]>([]);
@@ -30,12 +32,17 @@ export function HomePage() {
     );
   }
 
+  // Con cuenta no se pide nombre: lo pone el servidor desde el perfil.
+  const nombreNecesario = !identificado;
+  const nombreListo = !nombreNecesario || playerName.trim().length > 0;
+
   const handleCreate = async () => {
-    if (!uid || !playerName.trim()) return;
+    if (!nombreListo) return;
     setLoading(true);
     setError(null);
     try {
-      const id = await createGame(uid, playerName.trim(), maxLevel);
+      const id = await createGame(playerName.trim(), maxLevel);
+      await refrescarPerfil();
       navigate(`/lobby/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear partida');
@@ -45,12 +52,13 @@ export function HomePage() {
   };
 
   const handleJoin = async () => {
-    if (!uid || !playerName.trim() || !joinId.trim()) return;
+    if (!nombreListo || !joinId.trim()) return;
     setLoading(true);
     setError(null);
     try {
       const normalizedId = joinId.trim().toUpperCase();
-      await joinGame(normalizedId, uid, playerName.trim());
+      await joinGame(normalizedId, playerName.trim());
+      await refrescarPerfil();
       // Navigate to game if already started, otherwise to lobby
       navigate(`/lobby/${normalizedId}`);
     } catch (err) {
@@ -85,6 +93,7 @@ export function HomePage() {
       <div className="w-full max-w-sm space-y-4">
         {mode === 'menu' && (
           <>
+            <PerfilJugador jugador={user} />
             <button
               type="button"
               onClick={() => setMode('create')}
@@ -106,6 +115,15 @@ export function HomePage() {
             >
               <History size={20} /> Historial
             </button>
+            {identificado && (
+              <button
+                type="button"
+                onClick={() => setMode('perfil')}
+                className="w-full min-h-14 rounded-xl bg-white border border-gray-300 text-gray-600 font-bold text-lg flex items-center justify-center gap-2 active:bg-gray-50 transition-colors"
+              >
+                <UserCog size={20} /> Editar perfil
+              </button>
+            )}
           </>
         )}
 
@@ -115,17 +133,23 @@ export function HomePage() {
               {mode === 'create' ? 'Crear Nueva Partida' : 'Unirse a Partida'}
             </h2>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tu Nombre</label>
-              <input
-                type="text"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Introduce tu nombre"
-                maxLength={20}
-                className="w-full min-h-12 px-4 rounded-lg border border-gray-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
-              />
-            </div>
+            {nombreNecesario ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tu Nombre</label>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Introduce tu nombre"
+                  maxLength={20}
+                  className="w-full min-h-12 px-4 rounded-lg border border-gray-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Jugarás como <strong className="text-gray-900">{user?.nombreVisible || user?.username}</strong>.
+              </p>
+            )}
 
             {mode === 'join' && (
               <div>
@@ -175,7 +199,7 @@ export function HomePage() {
               </button>
               <button
                 type="button"
-                disabled={loading || !playerName.trim() || (mode === 'join' && !joinId.trim())}
+                disabled={loading || !nombreListo || (mode === 'join' && !joinId.trim())}
                 onClick={mode === 'create' ? handleCreate : handleJoin}
                 className="flex-1 min-h-12 rounded-lg bg-amber-500 text-white font-bold active:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               >
@@ -185,12 +209,25 @@ export function HomePage() {
           </div>
         )}
 
+        {mode === 'perfil' && user?.identificado && (
+          <EditarPerfil
+            jugador={user}
+            onGuardado={() => { void refrescarPerfil(); }}
+            onVolver={() => setMode('menu')}
+          />
+        )}
+
         {mode === 'history' && (
           <div className="bg-white rounded-2xl p-6 shadow-lg space-y-4">
             <h2 className="text-lg font-bold text-gray-900">Historial de Partidas</h2>
 
-            {history.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No hay partidas en el historial</p>
+            {!identificado ? (
+              <p className="text-gray-500 text-sm bg-amber-50 rounded-lg p-3">
+                El historial se guarda con tu cuenta. Inicia sesión para llevar registro de tus
+                partidas, tu nivel y tu experiencia.
+              </p>
+            ) : history.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">Aún no has terminado ninguna partida</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {history.map((entry) => (
@@ -211,6 +248,12 @@ export function HomePage() {
                       <p className="text-xs text-gray-400 mt-0.5">
                         {entry.playerNames.join(', ')}
                       </p>
+                      {entry.miPosicion != null && (
+                        <p className="text-xs font-medium text-gray-700 mt-1">
+                          Quedaste {entry.miPosicion}º
+                          {entry.miXp ? <span className="text-amber-600"> · +{entry.miXp} XP</span> : null}
+                        </p>
+                      )}
                     </div>
                     <ChevronRight size={16} className="text-gray-400" />
                   </button>

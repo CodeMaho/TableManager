@@ -76,7 +76,7 @@ export function LobbyPage() {
             const newIdx = idx + direction;
             if (newIdx < 0 || newIdx >= order.length) return;
             [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
-            reorderTurns(id, order, game.turnState.activePlayerId);
+            reorderTurns(id, order);
           } : undefined}
         />
       </div>
@@ -84,7 +84,7 @@ export function LobbyPage() {
       <div className="sticky bottom-0 p-4 bg-white border-t space-y-2">
         <button
           type="button"
-          onClick={() => toggleReady(id, uid, !myProfile?.isReady)}
+          onClick={() => toggleReady(id, !myProfile?.isReady)}
           className={`w-full min-h-14 rounded-xl font-bold text-lg transition-colors ${
             myProfile?.isReady
               ? 'bg-gray-200 text-gray-600 active:bg-gray-300'
@@ -98,7 +98,7 @@ export function LobbyPage() {
           <button
             type="button"
             disabled={!canStart}
-            onClick={() => startGame(id, turnOrder[0])}
+            onClick={() => startGame(id)}
             className="w-full min-h-14 rounded-xl bg-amber-500 text-white font-bold text-lg flex items-center justify-center gap-2 active:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             <Play size={20} /> Iniciar Partida

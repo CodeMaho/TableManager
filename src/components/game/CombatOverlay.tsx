@@ -41,7 +41,7 @@ export function CombatOverlay() {
         {isMyTurn && (
           <button
             type="button"
-            onClick={() => endCombat(gameId, false, game.turnState.activePlayerId)}
+            onClick={() => endCombat(gameId, false)}
             className="min-h-12 min-w-12 flex items-center justify-center rounded-full bg-white/20"
           >
             <X size={24} />
@@ -130,10 +130,10 @@ export function CombatOverlay() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => sendHelperRequest(gameId, uid, id)}
+                  onClick={() => sendHelperRequest(gameId, id)}
                   className="w-full min-h-12 px-4 rounded-lg border border-gray-200 text-left flex items-center gap-2 active:bg-gray-50"
                 >
-                  <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} playerName={player.name} size="sm" />
+                  <PlayerAvatar race={player.attributes.race} playerClass={player.attributes.class} sex={player.attributes.sex} size="sm" />
                   <span className="font-medium">{player.name}</span>
                   <span className="text-sm text-gray-500 ml-auto">Fuerza: {getCombatStrength(player)}</span>
                 </button>
@@ -186,7 +186,7 @@ export function CombatOverlay() {
           <button
             type="button"
             disabled={!combat.isWinning}
-            onClick={() => endCombat(gameId, true, game.turnState.activePlayerId)}
+            onClick={() => endCombat(gameId, true)}
             className={clsx(
               'w-full min-h-14 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-colors',
               combat.isWinning
@@ -199,14 +199,14 @@ export function CombatOverlay() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => endCombat(gameId, false, game.turnState.activePlayerId)}
+              onClick={() => endCombat(gameId, false)}
               className="flex-1 min-h-14 rounded-xl font-bold text-lg bg-white/20 text-white flex items-center justify-center gap-2 active:bg-white/30"
             >
               <Footprints size={20} /> HUIR
             </button>
             <button
               type="button"
-              onClick={() => dieInCombat(gameId, game.turnState.activePlayerId)}
+              onClick={() => dieInCombat(gameId)}
               className="flex-1 min-h-14 rounded-xl font-bold text-lg bg-black/40 text-white flex items-center justify-center gap-2 active:bg-black/60 border border-white/20"
             >
               <Skull size={20} /> MORIR

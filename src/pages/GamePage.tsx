@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HardHat, Shield, Hand, Footprints, Swords, SkipForward, ArrowDownUp, Backpack, Trophy, Home, Rabbit } from 'lucide-react';
 import clsx from 'clsx';
@@ -43,12 +43,6 @@ export function GamePage() {
     }
   }, [myProfile?.attributes.race, myProfile?.attributes.class]);
 
-  const playerIds = useMemo(() => {
-    if (!game) return [];
-    return game.turnState.turnOrder?.length
-      ? game.turnState.turnOrder
-      : Object.keys(game.players);
-  }, [game]);
 
   if (gameLoading || !game || !uid || !id || !myProfile) {
     return (
@@ -67,21 +61,20 @@ export function GamePage() {
   const winner = game.meta.winnerId ? game.players[game.meta.winnerId] : null;
 
   const handleEndTurn = () => {
-    // Usar turnIndex almacenado en Firebase para evitar duplicados al reordenar.
-    // Fallback a indexOf() solo para partidas antiguas sin turnIndex.
-    const currentIndex = game.turnState.turnIndex ?? playerIds.indexOf(game.turnState.activePlayerId);
-    const nextIndex = (currentIndex + 1) % playerIds.length;
-    nextTurn(id, playerIds[nextIndex], game.turnState.turnNumber + 1, nextIndex);
+    // A quién le toca lo decide el servidor, a partir del orden de turno
+    // guardado. Antes se calculaba aquí y se enviaba, lo que permitía saltarse
+    // el orden desde el cliente.
+    nextTurn(id);
   };
 
   const handleLevelChange = (newLevel: number) => {
     const clamped = clampLevel(newLevel, maxLevel);
-    updatePlayerLevel(id, uid, clamped);
+    updatePlayerLevel(id, clamped);
   };
 
   const handleRaceBlur = () => {
     if (raceInput !== myProfile.attributes.race) {
-      updatePlayer(id, uid, {
+      updatePlayer(id, {
         attributes: { ...myProfile.attributes, race: raceInput },
       });
     }
@@ -89,14 +82,14 @@ export function GamePage() {
 
   const handleClassBlur = () => {
     if (classInput !== myProfile.attributes.class) {
-      updatePlayer(id, uid, {
+      updatePlayer(id, {
         attributes: { ...myProfile.attributes, class: classInput },
       });
     }
   };
 
   const handleSexToggle = () => {
-    updatePlayer(id, uid, {
+    updatePlayer(id, {
       attributes: { ...myProfile.attributes, sex: myProfile.attributes.sex === 'M' ? 'F' : 'M' },
     });
   };
@@ -138,7 +131,12 @@ export function GamePage() {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <PlayerAvatar race={myProfile.attributes.race} playerClass={myProfile.attributes.class} sex={myProfile.attributes.sex} playerName={myProfile.name} size="lg" />
+                <PlayerAvatar
+                  race={myProfile.attributes.race}
+                  playerClass={myProfile.attributes.class}
+                  sex={myProfile.attributes.sex}
+                  size="lg"
+                />
                 <h3 className="font-bold text-gray-900 text-lg">{myProfile.name}</h3>
               </div>
               <div className="flex items-center gap-2 text-amber-600">
@@ -158,7 +156,7 @@ export function GamePage() {
               label="Debuff"
               value={myProfile.attributes.debuff || 0}
               min={0}
-              onChange={(v) => updatePlayer(id, uid, { attributes: { ...myProfile.attributes, debuff: v } })}
+              onChange={(v) => updatePlayer(id, { attributes: { ...myProfile.attributes, debuff: v } })}
             />
 
             {/* Sexo / Raza / Clase */}
@@ -205,11 +203,11 @@ export function GamePage() {
             <h3 className="font-bold text-gray-700 flex items-center gap-2">
               <Backpack size={18} /> Equipo
             </h3>
-            <GearSlot label="Cabeza" icon={HardHat} value={myProfile.gear.head} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, uid, 'head', v)} />
-            <GearSlot label="Armadura" icon={Shield} value={myProfile.gear.armor} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, uid, 'armor', v)} />
-            <GearSlot label="Manos" icon={Hand} value={myProfile.gear.hands} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, uid, 'hands', v)} />
-            <GearSlot label="Pies" icon={Footprints} value={myProfile.gear.feet} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, uid, 'feet', v)} />
-            <GearSlot label="Montura" icon={Rabbit} value={myProfile.gear.mount || 0} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, uid, 'mount', v)} />
+            <GearSlot label="Cabeza" icon={HardHat} value={myProfile.gear.head} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, 'head', v)} />
+            <GearSlot label="Armadura" icon={Shield} value={myProfile.gear.armor} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, 'armor', v)} />
+            <GearSlot label="Manos" icon={Hand} value={myProfile.gear.hands} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, 'hands', v)} />
+            <GearSlot label="Pies" icon={Footprints} value={myProfile.gear.feet} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, 'feet', v)} />
+            <GearSlot label="Montura" icon={Rabbit} value={myProfile.gear.mount || 0} disabled={!canEditGear} onChange={(v) => updatePlayerGear(id, 'mount', v)} />
           </div>
         </div>
 

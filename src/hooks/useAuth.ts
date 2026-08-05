@@ -1,39 +1,57 @@
-import { useState, useEffect } from 'react';
-import { signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { useState, useEffect, useCallback } from 'react';
+import { cargarJugador, type Jugador } from '../services/api';
+
+// Identidad del jugador. Jugar NO exige cuenta.
+//
+//   - Sin cuenta se juega igual, como invitado: el servidor ata la identidad a
+//     una cookie del navegador, así que la partida en curso y el nombre elegido
+//     sobreviven a recargar la página, pero no hay progreso entre partidas.
+//   - Con cuenta (Keycloak, vía la puerta) aparecen el nivel, la experiencia y
+//     el historial, y el mismo jugador es el mismo en cualquier dispositivo.
+//
+// `uid` es null hasta que existe identidad. En cuanto se crea o se entra a una
+// partida el servidor la asigna, y `refrescar()` la trae.
 
 interface AuthState {
-  user: User | null;
+  user: Jugador | null;
   uid: string | null;
+  identificado: boolean;
   loading: boolean;
   error: string | null;
+  refrescar: () => Promise<void>;
 }
 
 export function useAuth(): AuthState {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    uid: null,
-    loading: true,
-    error: null,
-  });
+  const [user, setUser] = useState<Jugador | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setState({ user, uid: user.uid, loading: false, error: null });
-      } else {
-        signInAnonymously(auth).catch((err: Error) => {
-          setState((prev) => ({
-            ...prev,
-            loading: false,
-            error: err.message,
-          }));
-        });
-      }
-    });
-
-    return unsubscribe;
+  const refrescar = useCallback(async () => {
+    try {
+      setUser(await cargarJugador());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo leer tu perfil');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return state;
+  useEffect(() => {
+    let vivo = true;
+    cargarJugador()
+      .then((j) => { if (vivo) { setUser(j); setError(null); } })
+      .catch((err: Error) => { if (vivo) setError(err.message); })
+      .finally(() => { if (vivo) setLoading(false); });
+    return () => { vivo = false; };
+  }, []);
+
+  return {
+    user,
+    uid: user?.id ?? null,
+    identificado: user?.identificado ?? false,
+    loading,
+    error,
+    refrescar,
+  };
 }

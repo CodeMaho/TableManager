@@ -1,6 +1,27 @@
+# munckin — sitio PÚBLICO con login opcional.
+#
+# Antes todo pasaba por gate.php y sin sesión no se servía ni un fichero. Ahora
+# jugar no exige cuenta, así que el sitio se sirve en abierto y la sesión solo
+# añade progreso: nivel, experiencia e historial.
+#
+# La identidad la resuelve la API (api/jugador.php), que responde 200 tanto si
+# hay sesión como si no. Los ficheros del flujo de acceso (login.php,
+# registro.php, logout.php) se ejecutan como PHP normal.
+
 RewriteEngine On
 RewriteBase /
-RewriteRule ^index\.html$ - [L]
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
+
+# Ficheros que solo deben incluirse desde otros PHP, nunca pedirse por URL.
+# Si algún día PHP dejara de procesarse, esto evita que se sirvan en claro
+# (config.php lleva el secreto de la app y la contraseña de la base).
+RewriteRule ^(config|db|session|gate)\.php$ - [F,L]
+RewriteRule ^api/_ - [F,L]
+
+# Todo lo que existe de verdad se sirve tal cual: assets, imágenes y los .php
+# del acceso y de la API, que Apache ejecuta con normalidad.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# El resto son rutas de la SPA (/lobby/XXXX, /game/XXXX) -> las resuelve React.
+RewriteRule ^ index.html [L]

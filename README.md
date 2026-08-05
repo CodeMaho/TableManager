@@ -7,13 +7,14 @@ Aplicación web progresiva en tiempo real para registrar niveles, equipamiento y
 ## Funcionalidades
 
 - **Sincronización en tiempo real** — Todos los jugadores ven los cambios al instante (<100ms)
-- **Sesiones anónimas** — Sin registro; únete con un código de partida de 4 caracteres
+- **Sin registro obligatorio** — Únete con un código de 4 caracteres; con cuenta se guardan tu nivel, tu experiencia y tu historial
 - **Mobile-first** — Optimizado para móviles con controles táctiles amplios
 - **Seguimiento de combate** — Resolución completa con modificadores de monstruo/jugador y sistema de ayudante
 - **Gestión de turnos** — Orden de turno forzado con roles activo/pasivo
 - **Equipamiento** — Ranuras de cabeza, armadura, manos y pies con mochila de almacenamiento
 - **Panel del anfitrión** — Expulsar jugadores, reordenar turnos y gestionar la partida
 - **Historial de partidas** — Consulta sesiones y resultados anteriores
+- **Perfil propio** — Con cuenta: nombre de munchkin, género, nivel y experiencia
 
 ## Tecnologías
 
@@ -23,17 +24,20 @@ Aplicación web progresiva en tiempo real para registrar niveles, equipamiento y
 | Build | Vite |
 | Estilos | Tailwind CSS v4 |
 | Estado | React Context API |
-| Backend | Firebase Realtime Database |
-| Auth | Firebase Auth Anónimo |
+| Backend | API PHP + MySQL (`public/api/`) |
+| Auth | Keycloak **opcional** — se puede jugar sin cuenta |
 | Enrutamiento | React Router DOM v7 |
 | Iconos | Lucide React |
 
 ## Requisitos previos
 
 - [Node.js](https://nodejs.org/) 18+
-- Un proyecto de [Firebase](https://firebase.google.com/) con:
-  - **Realtime Database** habilitado
-  - **Autenticación anónima** habilitada
+- Un hosting con **PHP** y **MySQL** (el webspace de IONOS) donde desplegar
+- Los ficheros de acceso de `webspace-gate` (`login.php`, `registro.php`, `logout.php`,
+  `session.php`, `db.php`) en el docroot. **No hacen de puerta**: el sitio es público y la sesión
+  solo añade progreso
+- Los esquemas `sql/01_core.sql`, `sql/02_munckin.sql` y `sql/04_munckin_invitados_xp.sql`
+  ejecutados en la base
 
 ## Puesta en marcha
 
@@ -50,21 +54,11 @@ cd TableManager
 npm install
 ```
 
-### 3. Configurar Firebase
+### 3. Configurar el backend
 
-Abre `src/services/firebase.ts` y reemplaza el objeto `firebaseConfig` con las credenciales de tu proyecto Firebase:
-
-```typescript
-const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  databaseURL: "https://TU_PROYECTO-default-rtdb.REGION.firebasedatabase.app",
-  projectId: "TU_PROYECTO",
-  storageBucket: "TU_PROYECTO.firebasestorage.app",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID",
-};
-```
+No hay credenciales que poner en el frontend: la identidad la aporta la cookie de sesión que
+firma la puerta, y la API vive en el mismo origen. La configuración (base de datos y secreto de
+la app) está en el `config.php` de la puerta, en el servidor.
 
 ### 4. Iniciar el servidor de desarrollo
 
@@ -72,7 +66,9 @@ const firebaseConfig = {
 npm run dev
 ```
 
-La app estará disponible en `http://localhost:5173`.
+La app estará en `http://localhost:5173`, pero **las llamadas a `/api/*.php` fallarán**: no hay
+PHP ni sesión de la puerta en local. Para probar el flujo completo hay que desplegar en el
+subdominio, o levantar un proxy hacia él en `vite.config.ts`.
 
 ## Scripts disponibles
 
@@ -85,20 +81,24 @@ La app estará disponible en `http://localhost:5173`.
 
 ## Despliegue
 
-La app puede desplegarse en cualquier plataforma de hosting estático (Firebase Hosting, Vercel, Netlify, etc.).
-
-### Firebase Hosting
+La app ya **no es estática**: necesita PHP y MySQL, así que se despliega en el webspace.
 
 ```bash
 npm run build
-firebase deploy
 ```
+
+Y se sube el contenido de `dist/` al docroot del subdominio, junto a `login.php`, `logout.php`,
+`registro.php`, `session.php`, `db.php`, `api/perfil.php` y `config.php`.
+El `.htaccess` sale ya en el build: sirve los ficheros en abierto, deja las rutas de la SPA a
+React y bloquea por URL los `.php` que solo deben incluirse.
 
 ## Estructura del proyecto
 
 ```
 src/
 ├── components/
+│   ├── PerfilJugador.tsx       # Nivel, experiencia y cerrar sesión (inicio)
+│   ├── EditarPerfil.tsx        # Nombre de munchkin y género
 │   ├── layout/
 │   │   ├── GameLayout.tsx      # Contenedor principal del juego
 │   │   └── Navbar.tsx          # Indicador de turno y estado
@@ -113,15 +113,15 @@ src/
 ├── context/
 │   └── GameContext.tsx         # Proveedor global de estado
 ├── hooks/
-│   ├── useAuth.ts              # Autenticación anónima Firebase
-│   ├── useGame.ts              # Suscripción a Firebase Realtime DB
+│   ├── useAuth.ts              # Identidad desde /api/jugador.php (opcional)
+│   ├── useGame.ts              # Sondeo de /api/estado.php + escrituras
 │   └── useCombat.ts            # Cálculo de fuerza de combate
 ├── pages/
 │   ├── HomePage.tsx            # Pantalla de crear/unirse a partida
 │   ├── LobbyPage.tsx           # Sala de espera previa al juego
 │   └── GamePage.tsx            # Vista principal de la partida
 ├── services/
-│   └── firebase.ts             # Inicialización de Firebase
+│   └── api.ts                  # Cliente HTTP de /api/*.php
 ├── types/
 │   └── game.ts                 # Interfaces TypeScript
 └── utils/
@@ -131,17 +131,32 @@ src/
 
 ## Modelo de datos
 
-Las partidas se almacenan en Firebase Realtime Database bajo `/games/<GAME_ID>`:
+Las partidas se guardan en MySQL (esquema en `keycloak-api/webspace-gate/sql/02_munckin.sql`):
 
 ```
-games/
-└── <GAME_ID>/
-    ├── meta/           # hostId, status, createdAt, maxLevel
-    ├── turnState/      # activePlayerId, phase, turnNumber, turnOrder
-    ├── combatState/    # isActive, monsterLevel, modifiers, helperId
-    └── players/
-        └── <UID>/      # name, isReady, attributes, gear
+munckin_perfil            # perfil por usuario: nombre, preferencias, XP y
+                          # contadores de partidas/victorias
+munckin_partida           # meta + turnState + combatState en una fila,
+                          # con `rev` (contador de cambios para el sondeo)
+munckin_partida_jugador   # una fila por jugador: name, isReady, attributes, gear
 ```
+
+`/api/estado.php` devuelve ese estado con **la misma forma** que tenía en Firebase, para que los
+componentes no cambien:
+
+```
+{ meta, turnState, combatState, players: { <ID_JUGADOR>: PlayerProfile } }
+```
+
+El id de jugador es `usuario.id`. Con cuenta deriva del `sub` de Keycloak y es el mismo en
+cualquier dispositivo; sin cuenta es un invitado atado a una cookie del navegador.
+
+### Progresión (solo con cuenta)
+
+Al cerrar una partida se fija la clasificación —nivel alcanzado, y a igualdad fuerza de combate—
+y se reparte experiencia: **100 / 60 / 40 / 30 / 25**, y **20** del quinto puesto en adelante.
+**100 XP = 1 nivel.** El nivel no se guarda en ningún sitio: se deriva de la XP, así no puede
+descuadrarse.
 
 ### Perfil de jugador
 

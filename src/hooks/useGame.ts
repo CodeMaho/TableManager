@@ -1,58 +1,52 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ref, onValue, off, set, update, get, push, runTransaction } from 'firebase/database';
-import { db } from '../services/firebase';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { accion, cargarEstado, cargarHistorial, type EstadoPartida } from '../services/api';
 import type { GameSession, PlayerProfile, GameHistoryEntry, HelperRequestStatus } from '../types/game';
-import { generateGameId } from '../utils/munchkinMath';
+
+// Sustituye a Firebase Realtime Database por la API PHP + MySQL.
+//
+// Diferencia de fondo: antes `onValue` empujaba los cambios; ahora se SONDEA.
+// Para que no se note más de lo imprescindible:
+//   - cada escritura devuelve ya el estado nuevo, así que quien actúa lo ve al
+//     instante y no espera al siguiente sondeo;
+//   - el sondeo manda el `rev` que tiene, y mientras nadie escriba la respuesta
+//     es un objeto diminuto que ni siquiera reconstruye el estado.
+// El resto de la mesa ve los cambios en INTERVALO_MS como mucho.
+//
+// Las firmas han perdido los parámetros que identificaban al jugador
+// (`playerId`, `fromId`, `activePlayerId`…) y los que el servidor recalcula
+// (`turnNumber`, `nextTurnIndex`): el servidor usa SIEMPRE el usuario de la
+// sesión y el orden de turno guardado. Es lo que impide suplantar a otro, y
+// dejarlos en la firma habría hecho creer que sirven para algo.
+
+const INTERVALO_MS = 1000;
 
 interface UseGameReturn {
   game: GameSession | null;
   gameId: string | null;
   loading: boolean;
   error: string | null;
-  createGame: (hostId: string, hostName: string, maxLevel: number) => Promise<string>;
-  joinGame: (gameId: string, playerId: string, playerName: string) => Promise<void>;
-  updatePlayer: (gameId: string, playerId: string, updates: Partial<PlayerProfile>) => Promise<void>;
-  updatePlayerGear: (gameId: string, playerId: string, slot: string, value: number) => Promise<void>;
-  updatePlayerLevel: (gameId: string, playerId: string, level: number) => Promise<void>;
-  toggleReady: (gameId: string, playerId: string, isReady: boolean) => Promise<void>;
-  startGame: (gameId: string, firstPlayerId: string) => Promise<void>;
-  nextTurn: (gameId: string, nextPlayerId: string, turnNumber: number, nextTurnIndex: number) => Promise<void>;
+  createGame: (hostName: string, maxLevel: number) => Promise<string>;
+  joinGame: (gameId: string, playerName: string) => Promise<void>;
+  updatePlayer: (gameId: string, updates: Partial<PlayerProfile>) => Promise<void>;
+  updatePlayerGear: (gameId: string, slot: string, value: number) => Promise<void>;
+  updatePlayerLevel: (gameId: string, level: number) => Promise<void>;
+  toggleReady: (gameId: string, isReady: boolean) => Promise<void>;
+  startGame: (gameId: string) => Promise<void>;
+  nextTurn: (gameId: string) => Promise<void>;
   startCombat: (gameId: string) => Promise<void>;
   updateCombat: (gameId: string, updates: Partial<GameSession['combatState']>) => Promise<void>;
-  endCombat: (gameId: string, won: boolean, activePlayerId: string) => Promise<void>;
-  dieInCombat: (gameId: string, playerId: string) => Promise<void>;
-  sendHelperRequest: (gameId: string, fromId: string, toId: string) => Promise<void>;
+  endCombat: (gameId: string, won: boolean) => Promise<void>;
+  dieInCombat: (gameId: string) => Promise<void>;
+  sendHelperRequest: (gameId: string, toId: string) => Promise<void>;
   respondHelperRequest: (gameId: string, status: HelperRequestStatus) => Promise<void>;
   endGame: (gameId: string, winnerId: string) => Promise<void>;
   updateMaxLevel: (gameId: string, maxLevel: number) => Promise<void>;
-  reorderTurns: (gameId: string, newOrder: string[], activePlayerId: string) => Promise<void>;
+  reorderTurns: (gameId: string, newOrder: string[]) => Promise<void>;
   subscribeToGame: (gameId: string) => void;
   kickPlayer: (gameId: string, playerId: string) => Promise<void>;
   getHistory: () => Promise<GameHistoryEntry[]>;
   loadGameFromHistory: (gameId: string) => void;
   addCombatTime: (gameId: string, delta: number) => Promise<void>;
-}
-
-function newPlayerProfile(name: string): PlayerProfile {
-  return {
-    name,
-    isReady: false,
-    attributes: {
-      level: 1,
-      debuff: 0,
-      sex: 'M',
-      race: 'Humano',
-      class: 'Ninguna',
-    },
-    gear: {
-      head: 0,
-      armor: 0,
-      hands: 0,
-      feet: 0,
-      mount: 0,
-      backpack: [],
-    },
-  };
 }
 
 export function useGame(): UseGameReturn {
@@ -61,393 +55,197 @@ export function useGame(): UseGameReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const subscribeToGame = useCallback((id: string) => {
-    setLoading(true);
-    setGameId(id);
-    const gameRef = ref(db, `games/${id}`);
-    onValue(
-      gameRef,
-      (snapshot) => {
-        const data = snapshot.val() as GameSession | null;
-        setGame(data);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        setError(err.message);
-        setLoading(false);
-      }
-    );
+  // `rev` en una ref y no en el estado: cambia en cada sondeo y no debe
+  // provocar re-render ni reiniciar el efecto que sondea.
+  const revRef = useRef<number>(0);
+
+  const aplicar = useCallback((estado: EstadoPartida) => {
+    revRef.current = estado.rev;
+    setGame(estado);
+    setError(null);
   }, []);
 
+  const subscribeToGame = useCallback((id: string) => {
+    setLoading(true);
+    revRef.current = 0;
+    setGameId(id);
+  }, []);
+
+  // Sondeo mientras haya partida seleccionada.
   useEffect(() => {
-    return () => {
-      if (gameId) {
-        const gameRef = ref(db, `games/${gameId}`);
-        off(gameRef);
+    if (!gameId) return;
+
+    let vivo = true;
+    let temporizador: number | undefined;
+
+    const tick = async () => {
+      try {
+        const estado = await cargarEstado(gameId, revRef.current || undefined);
+        if (!vivo) return;
+        if (estado) aplicar(estado);
+        setLoading(false);
+      } catch (err) {
+        if (!vivo) return;
+        setError(err instanceof Error ? err.message : 'Error de conexión');
+        setLoading(false);
+      } finally {
+        if (vivo) temporizador = window.setTimeout(tick, INTERVALO_MS);
       }
     };
-  }, [gameId]);
 
-  const createGame = useCallback(async (hostId: string, hostName: string, maxLevel: number): Promise<string> => {
-    const id = generateGameId();
-    const newGame: GameSession = {
-      meta: {
-        hostId,
-        createdAt: Date.now(),
-        status: 'LOBBY',
-        maxLevel,
-      },
-      turnState: {
-        activePlayerId: hostId,
-        phase: 'EXPLORATION',
-        turnNumber: 0,
-        turnOrder: [hostId],
-        turnIndex: 0,
-      },
-      combatState: {
-        isActive: false,
-        monsterLevel: 1,
-        monsterModifiers: 0,
-        playerModifiers: 0,
-        helperId: null,
-        helperRequest: null,
-      },
-      players: {
-        [hostId]: newPlayerProfile(hostName),
-      },
+    tick();
+    return () => {
+      vivo = false;
+      if (temporizador !== undefined) window.clearTimeout(temporizador);
     };
+  }, [gameId, aplicar]);
 
+  /** Ejecuta una acción y refleja al momento el estado que devuelve. */
+  const ejecutar = useCallback(async (
+    nombre: string,
+    datos: Record<string, unknown>,
+    mensajeError: string,
+  ): Promise<void> => {
     try {
-      await set(ref(db, `games/${id}`), newGame);
-      subscribeToGame(id);
-      return id;
+      aplicar(await accion(nombre, datos));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : mensajeError);
+    }
+  }, [aplicar]);
+
+  const createGame = useCallback(async (hostName: string, maxLevel: number): Promise<string> => {
+    try {
+      const estado = await accion('crear', { nombre: hostName, maxLevel });
+      revRef.current = estado.rev;
+      setGame(estado);
+      setGameId(estado.gameId);
+      setError(null);
+      return estado.gameId;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al crear partida';
       setError(msg);
       throw new Error(msg);
     }
-  }, [subscribeToGame]);
+  }, []);
 
-  const joinGame = useCallback(async (id: string, playerId: string, playerName: string) => {
+  const joinGame = useCallback(async (id: string, playerName: string) => {
     try {
-      const snapshot = await get(ref(db, `games/${id}`));
-      if (!snapshot.exists()) {
-        throw new Error('Partida no encontrada');
-      }
-      const gameData = snapshot.val() as GameSession;
-
-      // Check if a player with this name already exists (reconnection)
-      const existingEntry = Object.entries(gameData.players).find(
-        ([, p]) => p.name === playerName
-      );
-
-      if (existingEntry) {
-        // Reconnect: remap the existing player data to the new UID
-        const [oldId, existingProfile] = existingEntry;
-        if (oldId !== playerId) {
-          // Move player data from old UID to new UID
-          await set(ref(db, `games/${id}/players/${playerId}`), existingProfile);
-          await set(ref(db, `games/${id}/players/${oldId}`), null);
-
-          // Update references if the old ID was the host
-          if (gameData.meta.hostId === oldId) {
-            await set(ref(db, `games/${id}/meta/hostId`), playerId);
-          }
-          // Update active player reference if needed
-          if (gameData.turnState.activePlayerId === oldId) {
-            await set(ref(db, `games/${id}/turnState/activePlayerId`), playerId);
-          }
-          // Update helper reference if needed
-          if (gameData.combatState.helperId === oldId) {
-            await set(ref(db, `games/${id}/combatState/helperId`), playerId);
-          }
-          // Replace old UID in turnOrder
-          const oldOrder: string[] = gameData.turnState.turnOrder ?? Object.keys(gameData.players);
-          const newOrder = oldOrder.map((uid) => (uid === oldId ? playerId : uid));
-          await set(ref(db, `games/${id}/turnState/turnOrder`), newOrder);
-        }
-        subscribeToGame(id);
-        return;
-      }
-
-      // New player joining - allowed at any game state
-      const currentOrder: string[] = gameData.turnState.turnOrder ?? Object.keys(gameData.players);
-      await set(ref(db, `games/${id}/players/${playerId}`), newPlayerProfile(playerName));
-      await set(ref(db, `games/${id}/turnState/turnOrder`), [...currentOrder, playerId]);
-      subscribeToGame(id);
+      const estado = await accion('unirse', { id, nombre: playerName });
+      revRef.current = estado.rev;
+      setGame(estado);
+      setGameId(estado.gameId);
+      setError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al unirse';
       setError(msg);
       throw new Error(msg);
     }
-  }, [subscribeToGame]);
-
-  const updatePlayer = useCallback(async (id: string, playerId: string, updates: Partial<PlayerProfile>) => {
-    try {
-      await update(ref(db, `games/${id}/players/${playerId}`), updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
-    }
   }, []);
 
-  const updatePlayerGear = useCallback(async (id: string, playerId: string, slot: string, value: number) => {
-    try {
-      await set(ref(db, `games/${id}/players/${playerId}/gear/${slot}`), value);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
-    }
-  }, []);
+  const updatePlayer = useCallback(
+    (id: string, updates: Partial<PlayerProfile>) =>
+      ejecutar('jugador', { id, ...updates }, 'Error al actualizar'),
+    [ejecutar],
+  );
 
-  const updatePlayerLevel = useCallback(async (id: string, playerId: string, level: number) => {
-    try {
-      await set(ref(db, `games/${id}/players/${playerId}/attributes/level`), level);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
-    }
-  }, []);
+  const updatePlayerGear = useCallback(
+    (id: string, slot: string, value: number) =>
+      ejecutar('gear', { id, slot, valor: value }, 'Error al actualizar'),
+    [ejecutar],
+  );
 
-  const toggleReady = useCallback(async (id: string, playerId: string, isReady: boolean) => {
-    try {
-      await set(ref(db, `games/${id}/players/${playerId}/isReady`), isReady);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
-    }
-  }, []);
+  const updatePlayerLevel = useCallback(
+    (id: string, level: number) =>
+      ejecutar('nivel', { id, nivel: level }, 'Error al actualizar'),
+    [ejecutar],
+  );
 
-  const startGame = useCallback(async (id: string, firstPlayerId: string) => {
-    try {
-      await update(ref(db, `games/${id}`), {
-        'meta/status': 'IN_GAME',
-        'turnState/activePlayerId': firstPlayerId,
-        'turnState/phase': 'EXPLORATION',
-        'turnState/turnNumber': 1,
-        'turnState/turnIndex': 0,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar partida');
-    }
-  }, []);
+  const toggleReady = useCallback(
+    (id: string, isReady: boolean) =>
+      ejecutar('listo', { id, listo: isReady }, 'Error al actualizar'),
+    [ejecutar],
+  );
 
-  const nextTurn = useCallback(async (id: string, nextPlayerId: string, turnNumber: number, nextTurnIndex: number) => {
-    try {
-      await update(ref(db, `games/${id}/turnState`), {
-        activePlayerId: nextPlayerId,
-        phase: 'EXPLORATION',
-        turnNumber,
-        turnIndex: nextTurnIndex,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al avanzar turno');
-    }
-  }, []);
+  const startGame = useCallback(
+    (id: string) =>
+      ejecutar('empezar', { id }, 'Error al iniciar partida'),
+    [ejecutar],
+  );
 
-  const startCombat = useCallback(async (id: string) => {
-    try {
-      await update(ref(db, `games/${id}`), {
-        'turnState/phase': 'COMBAT',
-        'combatState/isActive': true,
-        'combatState/monsterLevel': 1,
-        'combatState/monsterModifiers': 0,
-        'combatState/playerModifiers': 0,
-        'combatState/helperId': null,
-        'combatState/helperRequest': null,
-        'combatState/combatStartedAt': Date.now(),
-        'combatState/combatExtraSeconds': 0,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar combate');
-    }
-  }, []);
+  // El servidor calcula a quién le toca a partir del orden guardado, así que
+  // ignora el jugador y el número de turno que se le pasen.
+  const nextTurn = useCallback(
+    (id: string) =>
+      ejecutar('siguienteTurno', { id }, 'Error al avanzar turno'),
+    [ejecutar],
+  );
 
-  const updateCombat = useCallback(async (id: string, updates: Partial<GameSession['combatState']>) => {
-    try {
-      await update(ref(db, `games/${id}/combatState`), updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar');
-    }
-  }, []);
+  const startCombat = useCallback(
+    (id: string) => ejecutar('empezarCombate', { id }, 'Error al iniciar combate'),
+    [ejecutar],
+  );
 
-  const sendHelperRequest = useCallback(async (id: string, fromId: string, toId: string) => {
-    try {
-      await set(ref(db, `games/${id}/combatState/helperRequest`), {
-        fromId,
-        toId,
-        status: 'pending',
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al enviar invitación');
-    }
-  }, []);
+  const updateCombat = useCallback(
+    (id: string, updates: Partial<GameSession['combatState']>) =>
+      ejecutar('combate', { id, ...updates }, 'Error al actualizar'),
+    [ejecutar],
+  );
 
-  const respondHelperRequest = useCallback(async (id: string, status: HelperRequestStatus) => {
-    try {
-      if (status === 'accepted') {
-        // Get the request to know who is the helper
-        const reqSnap = await get(ref(db, `games/${id}/combatState/helperRequest`));
-        const request = reqSnap.val() as { toId: string } | null;
-        if (request) {
-          await update(ref(db, `games/${id}/combatState`), {
-            helperId: request.toId,
-            helperRequest: null,
-          });
-        }
-      } else {
-        await set(ref(db, `games/${id}/combatState/helperRequest`), null);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al responder invitación');
-    }
-  }, []);
+  const endCombat = useCallback(
+    (id: string, won: boolean) =>
+      ejecutar('terminarCombate', { id, gano: won }, 'Error al finalizar combate'),
+    [ejecutar],
+  );
 
-  const endCombat = useCallback(async (id: string, won: boolean, activePlayerId: string) => {
-    try {
-      const updates: Record<string, unknown> = {
-        'turnState/phase': 'EXPLORATION',
-        'combatState/isActive': false,
-        'combatState/monsterLevel': 1,
-        'combatState/monsterModifiers': 0,
-        'combatState/playerModifiers': 0,
-        'combatState/helperId': null,
-        'combatState/helperRequest': null,
-        'combatState/combatStartedAt': null,
-        'combatState/combatExtraSeconds': 0,
-      };
+  const dieInCombat = useCallback(
+    (id: string) => ejecutar('morir', { id }, 'Error al morir en combate'),
+    [ejecutar],
+  );
 
-      if (won) {
-        const snapshot = await get(ref(db, `games/${id}/players/${activePlayerId}/attributes/level`));
-        const currentLevel = (snapshot.val() as number) || 1;
-        const metaSnap = await get(ref(db, `games/${id}/meta/maxLevel`));
-        const maxLevel = (metaSnap.val() as number) || 10;
-        const newLevel = Math.min(maxLevel, currentLevel + 1);
-        updates[`players/${activePlayerId}/attributes/level`] = newLevel;
+  const sendHelperRequest = useCallback(
+    (id: string, toId: string) =>
+      ejecutar('pedirAyuda', { id, aId: toId }, 'Error al enviar invitación'),
+    [ejecutar],
+  );
 
-        if (newLevel >= maxLevel) {
-          updates['meta/winnerId'] = activePlayerId;
-          updates['meta/status'] = 'ENDED';
-          const gameSnap = await get(ref(db, `games/${id}`));
-          const gameData = gameSnap.val() as GameSession;
-          const historyEntry: GameHistoryEntry = {
-            gameId: id,
-            createdAt: gameData.meta.createdAt,
-            endedAt: Date.now(),
-            winnerId: activePlayerId,
-            winnerName: gameData.players[activePlayerId]?.name,
-            maxLevel,
-            playerNames: Object.values(gameData.players).map((p) => p.name),
-          };
-          await push(ref(db, 'history'), historyEntry);
-        }
-      }
+  const respondHelperRequest = useCallback(
+    (id: string, status: HelperRequestStatus) =>
+      ejecutar('responderAyuda', { id, estado: status }, 'Error al responder invitación'),
+    [ejecutar],
+  );
 
-      await update(ref(db, `games/${id}`), updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al finalizar combate');
-    }
-  }, []);
+  const endGame = useCallback(
+    (id: string, winnerId: string) =>
+      ejecutar('terminar', { id, ganadorId: winnerId }, 'Error al finalizar partida'),
+    [ejecutar],
+  );
 
-  const dieInCombat = useCallback(async (id: string, playerId: string) => {
-    try {
-      // Reset all gear to 0 but keep level, race, class
-      const updates: Record<string, unknown> = {
-        'turnState/phase': 'EXPLORATION',
-        'combatState/isActive': false,
-        'combatState/monsterLevel': 1,
-        'combatState/monsterModifiers': 0,
-        'combatState/playerModifiers': 0,
-        'combatState/helperId': null,
-        'combatState/helperRequest': null,
-        'combatState/combatStartedAt': null,
-        'combatState/combatExtraSeconds': 0,
-        [`players/${playerId}/gear/head`]: 0,
-        [`players/${playerId}/gear/armor`]: 0,
-        [`players/${playerId}/gear/hands`]: 0,
-        [`players/${playerId}/gear/feet`]: 0,
-        [`players/${playerId}/gear/mount`]: 0,
-        [`players/${playerId}/gear/backpack`]: [],
-      };
+  const updateMaxLevel = useCallback(
+    (id: string, maxLevel: number) =>
+      ejecutar('maxLevel', { id, maxLevel }, 'Error al actualizar nivel máximo'),
+    [ejecutar],
+  );
 
-      await update(ref(db, `games/${id}`), updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al morir en combate');
-    }
-  }, []);
+  const reorderTurns = useCallback(
+    (id: string, newOrder: string[]) =>
+      ejecutar('reordenar', { id, orden: newOrder }, 'Error al reordenar turnos'),
+    [ejecutar],
+  );
 
-  const endGame = useCallback(async (id: string, winnerId: string) => {
-    try {
-      const gameSnap = await get(ref(db, `games/${id}`));
-      const gameData = gameSnap.val() as GameSession;
+  const kickPlayer = useCallback(
+    (id: string, playerId: string) =>
+      ejecutar('expulsar', { id, jugadorId: playerId }, 'Error al expulsar jugador'),
+    [ejecutar],
+  );
 
-      await update(ref(db, `games/${id}/meta`), {
-        status: 'ENDED',
-        winnerId,
-      });
-
-      const historyEntry: GameHistoryEntry = {
-        gameId: id,
-        createdAt: gameData.meta.createdAt,
-        endedAt: Date.now(),
-        winnerId,
-        winnerName: gameData.players[winnerId]?.name,
-        maxLevel: gameData.meta.maxLevel,
-        playerNames: Object.values(gameData.players).map((p) => p.name),
-      };
-      await push(ref(db, 'history'), historyEntry);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al finalizar partida');
-    }
-  }, []);
-
-  const reorderTurns = useCallback(async (id: string, newOrder: string[], activePlayerId: string) => {
-    try {
-      const newTurnIndex = Math.max(0, newOrder.indexOf(activePlayerId));
-      await update(ref(db, `games/${id}/turnState`), {
-        turnOrder: newOrder,
-        turnIndex: newTurnIndex,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al reordenar turnos');
-    }
-  }, []);
-
-  const updateMaxLevel = useCallback(async (id: string, maxLevel: number) => {
-    try {
-      await set(ref(db, `games/${id}/meta/maxLevel`), maxLevel);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar nivel máximo');
-    }
-  }, []);
-
-  const kickPlayer = useCallback(async (id: string, playerId: string) => {
-    try {
-      const orderSnap = await get(ref(db, `games/${id}/turnState/turnOrder`));
-      const updates: Record<string, unknown> = { [`players/${playerId}`]: null };
-      if (orderSnap.exists()) {
-        const currentOrder = orderSnap.val() as string[];
-        updates['turnState/turnOrder'] = currentOrder.filter((uid) => uid !== playerId);
-      }
-      await update(ref(db, `games/${id}`), updates);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al expulsar jugador');
-    }
-  }, []);
-
-  const addCombatTime = useCallback(async (id: string, delta: number) => {
-    try {
-      await runTransaction(ref(db, `games/${id}/combatState/combatExtraSeconds`), (current) => {
-        return (current ?? 0) + delta;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al ajustar tiempo');
-    }
-  }, []);
+  const addCombatTime = useCallback(
+    (id: string, delta: number) => ejecutar('tiempoCombate', { id, delta }, 'Error al ajustar tiempo'),
+    [ejecutar],
+  );
 
   const getHistory = useCallback(async (): Promise<GameHistoryEntry[]> => {
     try {
-      const snapshot = await get(ref(db, 'history'));
-      if (!snapshot.exists()) return [];
-      const data = snapshot.val() as Record<string, GameHistoryEntry>;
-      return Object.values(data).sort((a, b) => b.endedAt - a.endedAt);
+      return await cargarHistorial();
     } catch {
       return [];
     }
